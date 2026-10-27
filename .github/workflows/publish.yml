@@ -105,7 +105,9 @@ jobs:
           for repo in "$GITHUB_REPOSITORY" "$LEGACY_REPO"; do
             if gh release view --repo "$repo" >/dev/null 2>&1; then
               echo "previous release read from $repo"
-              gh release download --repo "$repo" --dir prev --pattern 'snapshot*' --pattern 'aliases*' --pattern 'vulnids*' --pattern 'latest.dsse.json' --pattern 'keyset.dsse.json'
+              # Every file: the build reads the previous snapshot and delta
+              # manifests and the chunks they name, not only the snapshot files.
+              gh release download --repo "$repo" --dir prev
               echo "PREV=--prev=prev" >> "$GITHUB_ENV"
               exit 0
             fi
