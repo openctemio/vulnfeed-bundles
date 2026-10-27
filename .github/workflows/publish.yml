@@ -32,7 +32,7 @@ concurrency:
 env:
   # The collector, as a full commit SHA of openctemio/vulnfeed or one of its
   # release tags (vX.Y.Z). Moved by pull request only.
-  VULNFEED_REF: d9ecf086de73dfdfbe33e72499a9e5889419e1e7
+  VULNFEED_REF: 8b951fddd2684b5a4f3ec331d058d949628cfda9
   # Where the sequence continues from on the very first run, when this
   # repository has no release yet.
   LEGACY_REPO: openctemio/vulnfeed
@@ -175,6 +175,7 @@ jobs:
           Vulnerability bundle for OpenCTEM, published hourly: a signed snapshot and the delta from the previous release. Verification and use: see the README.
 
           This product uses data from the NVD API but is not endorsed or certified by the NVD.
+          CISA Known Exploited Vulnerabilities Catalog, a work of the U.S. government. EPSS scores from the Forum of Incident Response and Security Teams (https://www.first.org/epss), used with attribution.
           CVE records from the CVE List of the CVE Program. CVE is a registered trademark of The MITRE Corporation.
           See NOTICE for the terms of every source.
           NOTES
