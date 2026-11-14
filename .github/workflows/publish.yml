@@ -103,13 +103,26 @@ jobs:
         run: |
           mkdir -p prev
           for repo in "$GITHUB_REPOSITORY" "$LEGACY_REPO"; do
-            if gh release view --repo "$repo" >/dev/null 2>&1; then
-              echo "previous release read from $repo"
+            # The highest sequence (v1-N), never "latest": GitHub's latest
+            # is whatever was marked last and has pointed at a stale release.
+            tag="$(gh release list --repo "$repo" --limit 1000 --json tagName \
+              --jq '[.[] | select(.tagName | test("^v1-[0-9]+$"))] | sort_by(.tagName | ltrimstr("v1-") | tonumber) | reverse | .[0].tagName // empty')"
+            if [ -n "$tag" ]; then
+              echo "previous release $tag read from $repo"
               # Every file: the build reads the previous snapshot and delta
               # manifests and the chunks they name, not only the snapshot files.
-              tag="$(gh release view --repo "$repo" --json tagName --jq .tagName)"
               gh release download "$tag" --repo "$repo" --dir prev
               echo "PREV=--prev=prev" >> "$GITHUB_ENV"
+              # An expired base means the feed already went stale: say so loudly
+              # instead of building a huge delta against it.
+              python3 - "$tag" <<'PY'
+          import base64, json, sys, datetime
+          e = json.load(open("prev/latest.dsse.json"))
+          p = json.loads(base64.b64decode(e["payload"]))
+          end = datetime.datetime.fromisoformat(p["expires_at"].replace("Z", "+00:00"))
+          if end < datetime.datetime.now(datetime.timezone.utc):
+              sys.exit("::error::the build base %s expired at %s: the feed is stale, check the releases before publishing on top of it" % (sys.argv[1], p["expires_at"]))
+          PY
               exit 0
             fi
           done
@@ -172,6 +185,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$(python3 -c 'import json,base64,sys; e=json.load(open("out/latest.dsse.json")); print(json.loads(base64.b64decode(e["payload"]))["tag"])')"
+          # A tag can exist without a release (a release deleted by hand or by
+          # an old retention bug; tags are immutable). That is fine: the
+          # bundle's trust is its signature over the files and the tag name in
+          # the signed pointer, not the commit the tag points at, so the
+          # release is created on the existing tag.
+          if git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY" "refs/tags/$tag" >/dev/null 2>&1 &&
+             ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::tag $tag exists without a release: publishing the release on the existing tag"
+          fi
           cat > notes.md <<'NOTES'
           Vulnerability bundle for OpenCTEM, published hourly: a signed snapshot and the delta from the previous release. Verification and use: see the README.
 
@@ -184,12 +206,36 @@ jobs:
           # a draft). The script resumes a draft, skips chunks already there,
           # drops assets of an older build, and publishes when all are in.
           TITLE="$tag ($(date -u '+%Y-%m-%d %H:%M') UTC)" bash src/.github/scripts/publish-release.sh "$tag" out
-      - name: Keep the last 72 releases (three days)
+      - name: Releases/latest is the one just published
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[72:] | .[].tagName' |
-          while read -r tag; do
-            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          tag="$(python3 -c 'import json,base64; e=json.load(open("out/latest.dsse.json")); print(json.loads(base64.b64decode(e["payload"]))["tag"])')"
+          got="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)"
+          if [ "$got" != "$tag" ]; then
+            echo "::warning::releases/latest was '$got', not '$tag': marking $tag as latest"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --latest
+            got="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)"
+          fi
+          if [ "$got" != "$tag" ]; then
+            echo "::error::releases/latest is '$got' after publishing '$tag': platforms would read a stale pointer"
+            exit 1
+          fi
+      - name: Keep the last 72 releases (three days)
+        # Housekeeping only: it must never fail a run that already published.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(python3 -c 'import json,base64; e=json.load(open("out/latest.dsse.json")); print(json.loads(base64.b64decode(e["payload"]))["tag"])')"
+          # Order by the sequence in the tag (v1-N): every release has the same
+          # createdAt, so a date sort is a tie. Never touch the release just
+          # published; the newest 72 are kept. Tags are immutable (ruleset), so
+          # only the release is deleted, never the tag.
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName \
+            --jq '[.[] | select(.tagName | test("^v1-[0-9]+$"))] | sort_by(.tagName | ltrimstr("v1-") | tonumber) | reverse | .[72:] | .[].tagName' |
+          while read -r old; do
+            [ "$old" = "$tag" ] && continue
+            gh release delete "$old" --repo "$GITHUB_REPOSITORY" --yes ||
+              echo "::warning::could not delete release $old"
           done
