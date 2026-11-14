@@ -185,6 +185,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$(python3 -c 'import json,base64,sys; e=json.load(open("out/latest.dsse.json")); print(json.loads(base64.b64decode(e["payload"]))["tag"])')"
+          # A tag can exist without a release (a release deleted by hand or by
+          # an old retention bug; tags are immutable). That is fine: the
+          # bundle's trust is its signature over the files and the tag name in
+          # the signed pointer, not the commit the tag points at, so the
+          # release is created on the existing tag.
+          if git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY" "refs/tags/$tag" >/dev/null 2>&1 &&
+             ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::tag $tag exists without a release: publishing the release on the existing tag"
+          fi
           cat > notes.md <<'NOTES'
           Vulnerability bundle for OpenCTEM, published hourly: a signed snapshot and the delta from the previous release. Verification and use: see the README.
 
