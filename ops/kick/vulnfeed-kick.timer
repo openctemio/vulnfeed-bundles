@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly dispatch of the vulnerability bundle publisher
+
+[Timer]
+# Off the GitHub cron minute (17), so the two do not race for the same hour.
+OnCalendar=*-*-* *:47:00
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

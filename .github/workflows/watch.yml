@@ -1,0 +1,54 @@
+name: Feed watch
+
+# The dead-man's switch of the hourly publisher. GitHub runs scheduled
+# workflows on a best-effort basis and skips many hourly runs, so freshness
+# cannot depend on publish.yml's own cron. This workflow:
+#
+#   - opens the "feed-stale" issue (the maintainers are notified) when the
+#     newest release is older than two hours or the last publish run failed,
+#     and closes it when the feed is healthy again;
+#   - dispatches publish.yml when a release is due and no run is queued.
+#
+# It is started three ways, so one failing path does not silence it:
+#   1. every publish run that completes (workflow_run: reliable, no cron);
+#   2. its own cron every 30 minutes (a second chance on GitHub's side);
+#   3. workflow_dispatch from the maintainers' own scheduler outside GitHub
+#      (ops/kick, hourly). That scheduler is the primary cadence.
+
+on:
+  workflow_run:
+    workflows: ["Publish bundle"]
+    types: [completed]
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # dispatch publish.yml (no inputs) and read its runs
+      issues: write # the feed-stale issue
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Dispatch the publisher when a release is due
+        # Not after a run that just completed: the next one is not due yet.
+        if: github.event_name != 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/feed-health.sh kick
+      - name: Alert while stale or failing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/feed-health.sh alert

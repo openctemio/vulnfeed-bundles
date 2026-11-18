@@ -1,0 +1,28 @@
+[Unit]
+Description=Dispatch the vulnerability bundle publisher when a release is due
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=vulnfeed-kick
+Group=vulnfeed-kick
+ExecStart=/opt/vulnfeed-kick/vulnfeed-kick.sh
+TimeoutStartSec=120
+# Hardening: the job only calls the GitHub API.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+ReadOnlyPaths=/etc/vulnfeed-kick /opt/vulnfeed-kick
+Environment=HOME=/var/lib/vulnfeed-kick
+StateDirectory=vulnfeed-kick
