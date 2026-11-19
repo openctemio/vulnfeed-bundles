@@ -32,7 +32,7 @@ concurrency:
 env:
   # The collector, as a full commit SHA of openctemio/vulnfeed or one of its
   # release tags (vX.Y.Z). Moved by pull request only.
-  VULNFEED_REF: 8b951fddd2684b5a4f3ec331d058d949628cfda9
+  VULNFEED_REF: a4937bd34baf5a4d235e9341754f160b3c1dc7a2
   # Where the sequence continues from on the very first run, when this
   # repository has no release yet.
   LEGACY_REPO: openctemio/vulnfeed
