@@ -11,6 +11,8 @@ the collector in [openctemio/vulnfeed](https://github.com/openctemio/vulnfeed).
 |---|---|
 | Releases | the feed: tag `v1-N` = bundle format v1, sequence N (only grows); the title carries the UTC date and time |
 | `.github/workflows/publish.yml` | the hourly build, sign, verify and publish |
+| `.github/workflows/watch.yml` | the feed watch: opens the `feed-stale` issue when the newest release is older than 2 hours or a publish run failed, and dispatches the publisher when a release is due |
+| `ops/kick/` | the maintainers' hourly scheduler outside GitHub (GitHub's cron skips runs), with its install note |
 | `keys/` | public key material: `root-keyid.txt` (the offline root's key id), `keyset.dsse.json` (the key set the root signed), rotation steps |
 | `NOTICE` | the terms of the data sources |
 
